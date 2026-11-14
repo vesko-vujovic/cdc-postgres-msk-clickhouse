@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and adjust.
+
+region   = "eu-central-1"
+az_count = 2 # 3 for a production-like Kafka setup
+
+# Uncomment to cap retained WAL per slot (MB). The slot gets invalidated when hit.
+# max_slot_wal_keep_size_mb = 2048
+
+# alarm_email = "you@example.com"

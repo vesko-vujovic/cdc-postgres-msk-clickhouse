@@ -1,0 +1,64 @@
+#!/bin/bash
+# Bootstraps the ClickHouse box. Rendered by Terraform, runs once at first boot.
+set -euxo pipefail
+
+# --- packages ---
+dnf install -y dnf-plugins-core
+dnf config-manager --add-repo https://packages.clickhouse.com/rpm/clickhouse.repo
+dnf install -y clickhouse-server clickhouse-client
+dnf install -y postgresql16 || dnf install -y postgresql15
+
+# --- ClickHouse: read new Kafka consumer groups from the beginning ---
+mkdir -p /etc/clickhouse-server/config.d
+cat > /etc/clickhouse-server/config.d/kafka.xml <<'__CDC_EOF__'
+<clickhouse>
+  <kafka>
+    <auto_offset_reset>earliest</auto_offset_reset>
+  </kafka>
+</clickhouse>
+__CDC_EOF__
+systemctl enable --now clickhouse-server
+
+# --- demo files ---
+mkdir -p /opt/cdc/sql
+
+cat > /opt/cdc/env <<'__CDC_EOF__'
+PGHOST='${pg_host}'
+PGPORT='${pg_port}'
+PGDATABASE='${pg_db}'
+PGUSER='${pg_user}'
+PGPASSWORD='${pg_password}'
+PGSSLMODE='require'
+DBZ_PASSWORD='${dbz_password}'
+KAFKA_BOOTSTRAP='${kafka_bootstrap}'
+KAFKA_TOPIC='${kafka_topic}'
+__CDC_EOF__
+chmod 600 /opt/cdc/env
+
+cat > /opt/cdc/cdc.sh <<'__CDC_EOF__'
+${cdc_sh}
+__CDC_EOF__
+chmod 755 /opt/cdc/cdc.sh
+ln -sf /opt/cdc/cdc.sh /usr/local/bin/cdc
+
+cat > /opt/cdc/sql/postgres_init.sql <<'__CDC_EOF__'
+${postgres_init_sql}
+__CDC_EOF__
+
+cat > /opt/cdc/sql/clickhouse_init.sql <<'__CDC_EOF__'
+${clickhouse_init_sql}
+__CDC_EOF__
+
+cat > /opt/cdc/sql/seed.sql <<'__CDC_EOF__'
+${seed_sql}
+__CDC_EOF__
+
+cat > /opt/cdc/sql/churn.sql <<'__CDC_EOF__'
+${churn_sql}
+__CDC_EOF__
+
+cat > /opt/cdc/sql/slot_lag.sql <<'__CDC_EOF__'
+${slot_sql}
+__CDC_EOF__
+
+touch /opt/cdc/.ready
