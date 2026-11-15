@@ -173,3 +173,36 @@ resource "aws_mskconnect_connector" "debezium" {
 
   service_execution_role_arn = aws_iam_role.connector.arn
 }
+
+# The service execution role needs real permissions, not just a trust policy.
+# MSK Connect validates log delivery when the connector is created and returns
+# AccessDeniedException if this role cannot write to the log group, and the
+# worker needs to fetch the plugin ZIP from S3 when it starts.
+resource "aws_iam_role_policy" "connector" {
+  name = "${var.name}-msk-connect"
+  role = aws_iam_role.connector.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents",
+        ]
+        Resource = [
+          aws_cloudwatch_log_group.connect.arn,
+          "${aws_cloudwatch_log_group.connect.arn}:*",
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.plugins.arn}/*"
+      },
+    ]
+  })
+}
